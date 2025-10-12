@@ -33,6 +33,7 @@ contract Voting is Ownable {
     WorkflowStatus public status;
     mapping (address => Voter) public authorizedVoters;
     Proposal[] private proposals;
+    Voter[] private votesDetails;
 
     constructor() Ownable(msg.sender) {}
 
@@ -98,19 +99,24 @@ contract Voting is Ownable {
         authorizedVoters[msg.sender].hasVoted = true;
         authorizedVoters[msg.sender].votedProposalId = _proposalId;
         proposals[_proposalId].voteCount++;
+        votesDetails.push(authorizedVoters[msg.sender]);
         
         emit Voted(msg.sender, _proposalId);
     }
 
-    function getVoteByVoter(address _voterAddress) external view returns (Voter memory) {
+    function getVoteByVoter(address _voterAddress) hasCorrectWorkflowStatus(WorkflowStatus.VotingSessionEnded) senderIsRegistered external view returns (Voter memory) {
         require(authorizedVoters[_voterAddress].isRegistered, "Unknown voter");
         
         return authorizedVoters[_voterAddress];
     }
 
+    function getAllVotes() hasCorrectWorkflowStatus(WorkflowStatus.VotingSessionEnded) senderIsRegistered external view returns (Voter[] memory) {
+        return votesDetails;
+    }
+
     // Step 4 - Get the winning proposal (max voteCount)
     // Note: In case of a tie, returns the first proposal with the highest vote count
-    function getWinner() hasCorrectWorkflowStatus(WorkflowStatus.VotesTallied) hasProposalsAvailable external view returns (uint) {        
+    function getWinner() hasCorrectWorkflowStatus(WorkflowStatus.VotesTallied) hasProposalsAvailable external view returns (Proposal memory) {        
         uint maxVotes;
         uint winningProposalId;
         
@@ -121,6 +127,6 @@ contract Voting is Ownable {
             }
         }
 
-        return winningProposalId;
+        return proposals[winningProposalId];
     }
 }
