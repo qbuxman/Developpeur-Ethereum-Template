@@ -74,7 +74,7 @@ contract Voting is Ownable {
     }
 
     // Step 2 - The voters can submit proposal
-    function setProposal(string memory _description) hasCorrectWorkflowStatus(WorkflowStatus.ProposalsRegistrationStarted) senderIsRegistered external {
+    function setProposal(string calldata _description) hasCorrectWorkflowStatus(WorkflowStatus.ProposalsRegistrationStarted) senderIsRegistered external {
         require(bytes(_description).length > 0, "Description cannot be empty");
 
         proposals.push(

@@ -33,6 +33,7 @@ contract Voting is Ownable {
     WorkflowStatus public status;
     mapping (address => Voter) public authorizedVoters;
     Proposal[] private proposals;
+    Voter[] private votesDetails;
 
     constructor() Ownable(msg.sender) {}
 
@@ -62,8 +63,18 @@ contract Voting is Ownable {
         emit WorkflowStatusChange(_currentVoteStatus, _newStatus);
     }
 
-    // (NEW) Step 1 - The owner set voters in a whitelist 
-    // Description : Can add multiple address in one time (with a gas limit protection)
+    // Step 1 - The owner set voters in a whitelist 
+    function setWhitelist(address _newVoterAddress) hasCorrectWorkflowStatus(WorkflowStatus.RegisteringVoters) onlyOwner external {
+        require(_newVoterAddress != address(0), "Invalid address");
+        require(!authorizedVoters[_newVoterAddress].isRegistered, "Voter already registered");
+        
+        authorizedVoters[_newVoterAddress] = Voter(true, false, 0);
+        
+        emit VoterRegistered(_newVoterAddress);
+    }
+
+    // (NEW)
+    // Description : Can add multiple addresses in one time (with a gas limit protection)
     function setWhitelistBatch(address[] calldata _voterAddresses) external hasCorrectWorkflowStatus(WorkflowStatus.RegisteringVoters) onlyOwner {
         require(_voterAddresses.length > 0, "Empty array");
         require(_voterAddresses.length <= 100, "Too many addresses at once"); // Gas limit protection
@@ -81,7 +92,7 @@ contract Voting is Ownable {
     }
 
     // Step 2 - The voters can submit proposal
-    function setProposal(string memory _description) hasCorrectWorkflowStatus(WorkflowStatus.ProposalsRegistrationStarted) senderIsRegistered external {
+    function setProposal(string calldata _description) hasCorrectWorkflowStatus(WorkflowStatus.ProposalsRegistrationStarted) senderIsRegistered external {
         require(bytes(_description).length > 0, "Description cannot be empty");
 
         proposals.push(
@@ -106,6 +117,7 @@ contract Voting is Ownable {
         authorizedVoters[msg.sender].hasVoted = true;
         authorizedVoters[msg.sender].votedProposalId = _proposalId;
         proposals[_proposalId].voteCount++;
+        votesDetails.push(authorizedVoters[msg.sender]);
         
         emit Voted(msg.sender, _proposalId);
     }
@@ -116,9 +128,13 @@ contract Voting is Ownable {
         return authorizedVoters[_voterAddress];
     }
 
+    function getAllVotes() hasCorrectWorkflowStatus(WorkflowStatus.VotingSessionEnded) senderIsRegistered external view returns (Voter[] memory) {
+        return votesDetails;
+    }
+
     // Step 4 - Get the winning proposal (max voteCount)
     // Note: In case of a tie, returns the first proposal with the highest vote count
-    function getWinner() hasCorrectWorkflowStatus(WorkflowStatus.VotesTallied) hasProposalsAvailable external view returns (uint) {        
+    function getWinner() hasCorrectWorkflowStatus(WorkflowStatus.VotesTallied) hasProposalsAvailable external view returns (Proposal memory) {        
         uint maxVotes;
         uint winningProposalId;
         
@@ -129,6 +145,6 @@ contract Voting is Ownable {
             }
         }
 
-        return winningProposalId;
+        return proposals[winningProposalId];
     }
 }
