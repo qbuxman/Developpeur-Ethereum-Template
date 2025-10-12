@@ -4,7 +4,7 @@ pragma solidity 0.8.30;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract Voting is Ownable {
+contract VotingPlus is Ownable {
 
     struct Voter {
         bool isRegistered;
@@ -75,7 +75,7 @@ contract Voting is Ownable {
 
     // (NEW)
     // Description : Can add multiple addresses in one time (with a gas limit protection)
-    function setWhitelistBatch(address[] calldata _voterAddresses) external hasCorrectWorkflowStatus(WorkflowStatus.RegisteringVoters) onlyOwner {
+    function setWhitelistByBatch(address[] calldata _voterAddresses) external hasCorrectWorkflowStatus(WorkflowStatus.RegisteringVoters) onlyOwner {
         require(_voterAddresses.length > 0, "Empty array");
         require(_voterAddresses.length <= 100, "Too many addresses at once"); // Gas limit protection
         
@@ -146,5 +146,39 @@ contract Voting is Ownable {
         }
 
         return proposals[winningProposalId];
+    }
+
+    // (NEW)
+    // Description: Return all winners in case of equality
+    function getWinners() hasCorrectWorkflowStatus(WorkflowStatus.VotesTallied) hasProposalsAvailable external view returns (Proposal[] memory) {        
+        uint proposalsLength = proposals.length;
+        uint maxVotes;
+        uint winnerCount;
+        
+        // First loop : find the highest number of votes and the number of winners
+        for (uint i = 0; i < proposalsLength; i++) {
+            uint votes = proposals[i].voteCount;
+            
+            if (votes > maxVotes) {
+                maxVotes = votes;
+                winnerCount = 1;
+            } else if (votes == maxVotes) {
+                winnerCount++;
+            }
+        }
+        
+        // Create array of results with the exact length for gas optimization
+        Proposal[] memory winners = new Proposal[](winnerCount);
+        uint index = 0;
+        
+        // Second loop : populate winners array
+        for (uint i = 0; i < proposalsLength; i++) {
+            if (proposals[i].voteCount == maxVotes) {
+                winners[index] = proposals[i];
+                index++;
+            }
+        }
+        
+        return winners;
     }
 }
