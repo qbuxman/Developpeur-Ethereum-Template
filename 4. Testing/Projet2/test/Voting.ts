@@ -118,7 +118,6 @@ describe("Voting", function () {
             await contract.endProposalsRegistering();
             await contract.startVotingSession();
             expect(await contract.workflowStatus()).to.eq(3n);
-
         });
 
         it("Should revert if a non voter send vote", async () => {
@@ -177,4 +176,59 @@ describe("Voting", function () {
             await expect(contract.endVotingSession()).to.emit(contract, "WorkflowStatusChange").withArgs(3n, 4n);
         });
     });
+
+    describe("Full Voting workflow", () => {
+        before(async () => {
+            contract = await ethers.deployContract("Voting");
+            [owner, firstVoter, secondVoter, thirdVoter] = await ethers.getSigners();
+        });
+
+        it("Should complete entire voting process and determine winning proposal", async () => {
+
+            // 1. Register voters
+            expect(await contract.workflowStatus()).to.eq(0n);
+            await contract.addVoter(firstVoter.address);
+            await contract.addVoter(secondVoter.address);
+            await contract.addVoter(thirdVoter.address);
+
+            // 2. Start proposals registration
+            await contract.startProposalsRegistering();
+            expect(await contract.workflowStatus()).to.eq(1n);
+
+            // 3. Add proposals
+            await contract.connect(firstVoter).addProposal('Build a park');
+            await contract.connect(secondVoter).addProposal('Build a library');
+            await contract.connect(thirdVoter).addProposal('Build a school');
+
+            // 4. End proposals registration
+            await contract.endProposalsRegistering();
+            expect(await contract.workflowStatus()).to.eq(2n);
+
+            // 5. Start voting session
+            await contract.startVotingSession();
+            expect(await contract.workflowStatus()).to.eq(3n);
+
+            // 6. Vote
+            await contract.connect(firstVoter).setVote(3n);
+            await contract.connect(secondVoter).setVote(3n);
+            await contract.connect(thirdVoter).setVote(2n);
+
+            // 7. End voting session
+            await contract.endVotingSession();
+            expect(await contract.workflowStatus()).to.eq(4n);
+
+            // 8. Tally votes
+            await expect(contract.tallyVotes())
+                .to.emit(contract, "WorkflowStatusChange")
+                .withArgs(4n, 5n);
+
+            // 9. Verify results
+            expect(await contract.workflowStatus()).to.eq(5n);
+            expect(await contract.winningProposalID()).to.eq(3n);
+
+            const winningProposal = await contract.connect(firstVoter).getOneProposal(3n);
+            expect(winningProposal.description).to.eq('Build a school');
+            expect(winningProposal.voteCount).to.eq(2n);
+        });
+});
 });
