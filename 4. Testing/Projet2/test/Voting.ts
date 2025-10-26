@@ -8,13 +8,14 @@ describe("Voting", function () {
     let owner: any;
     let firstVoter: any;
     let secondVoter: any;
-
-    before(async () => {
-        contract = await ethers.deployContract("Voting");
-        [owner, firstVoter, secondVoter] = await ethers.getSigners();
-    })
+    let thirdVoter: any;
 
     describe("Initial state", () => {
+        before(async () => {
+            contract = await ethers.deployContract("Voting");
+            [owner, firstVoter, secondVoter, thirdVoter] = await ethers.getSigners();
+        });
+
         it("should winningProposalID == 0", async () => {
             expect(await contract.winningProposalID()).to.eq(0n)
         })
@@ -43,10 +44,22 @@ describe("Voting", function () {
     })
 
     describe("Getters", () => {
-        it("Should return a voter with getVoter", async () => {
-            await contract.addVoter(firstVoter.address)
+        before(async () => {
+            contract = await ethers.deployContract("Voting");
+            [owner, firstVoter, secondVoter, thirdVoter] = await ethers.getSigners();
+        });
+        
+        it("Should revert if getVoter called by non voter", async () => {
+            await expect(contract.connect(secondVoter).getVoter(firstVoter.address)).revert(ethers);
+        });
 
+        it("Should return a voter with getVoter", async () => {
+            await contract.addVoter(firstVoter.address);
             expect(await contract.connect(firstVoter).getVoter(firstVoter.address)).to.deep.eq([true, false, 0n]);
+        });
+
+        it("Should revert if getOneProposal called by non voter", async () => {
+            await expect(contract.connect(secondVoter).getVoter(secondVoter.address)).revert(ethers);
         });
 
         it("Should return a default proposal with getOneProposal", async () => {
@@ -63,8 +76,13 @@ describe("Voting", function () {
         });
     })
 
-    describe.only('Workflow', () => {
-        it.only("Should change workflow status only by the owner", async () => {
+    describe('Workflow', () => {
+        before(async () => {
+             contract = await ethers.deployContract("Voting");
+            [owner, firstVoter, secondVoter, thirdVoter] = await ethers.getSigners();
+        });
+
+        it("Should change workflow status only by the owner", async () => {
             await expect(contract.connect(firstVoter).startProposalsRegistering()).revert(ethers);
             await contract.startProposalsRegistering();
             expect(await contract.workflowStatus()).to.eq(1n);
@@ -87,4 +105,76 @@ describe("Voting", function () {
             expect(await contract.workflowStatus()).to.eq(5n);
         });
     })
+
+    describe('Vote', () => {
+        before(async () => {
+            contract = await ethers.deployContract("Voting");
+            [owner, firstVoter, secondVoter, thirdVoter] = await ethers.getSigners();
+            await contract.addVoter(firstVoter.address);
+            await contract.addVoter(secondVoter.address);
+            await contract.startProposalsRegistering();
+            await contract.connect(firstVoter).addProposal('Buy XRP lol');
+            await contract.connect(secondVoter).addProposal('Buy Bitcoin');
+            await contract.endProposalsRegistering();
+            await contract.startVotingSession();
+            expect(await contract.workflowStatus()).to.eq(3n);
+
+        });
+
+        it("Should revert if a non voter send vote", async () => {
+            await expect(contract.connect(thirdVoter).setVote(0n)).revert(ethers);
+        });
+
+        it("Should set correctly a vote", async () => {
+            await contract.connect(firstVoter).setVote(1n);
+            await contract.connect(secondVoter).setVote(1n);
+
+            expect(await contract.connect(firstVoter).getVoter(firstVoter.address)).to.deep.eq([true, true, 1n]);
+            expect(await contract.connect(firstVoter).getVoter(secondVoter.address)).to.deep.eq([true, true, 1n]);
+            expect(await contract.connect(firstVoter).getOneProposal(1n)).to.deep.eq(['Buy XRP lol', 2n]);
+        });
+
+        it("Should correctly revert if taillyVote has not be called by owner", async () => {
+            await contract.endVotingSession();
+            expect(await contract.workflowStatus()).to.eq(4n);
+            await expect(contract.connect(firstVoter).tallyVotes()).revert(ethers);
+        });
+
+        it("Should correctly tailled votes", async () => {
+            await contract.tallyVotes();
+
+            expect(await contract.winningProposalID()).to.eq(1n);
+        });
+    });
+
+    describe('Emits', () => {
+        before(async () => {
+            contract = await ethers.deployContract("Voting");
+            [owner, firstVoter, secondVoter, thirdVoter] = await ethers.getSigners();
+            expect(await contract.workflowStatus()).to.eq(0n);
+        });
+
+        it('Should emit event VoterRegistered when adding voter', async () => {
+            await expect(contract.addVoter(firstVoter.address))
+                .to.emit(contract, "VoterRegistered")
+                .withArgs(firstVoter.address);
+        });
+
+
+        it('Should emit event ProposalRegistered when adding proposal', async () => {
+            await expect(contract.startProposalsRegistering()).to.emit(contract, "WorkflowStatusChange").withArgs(0n, 1n);
+            await expect(contract.connect(firstVoter).addProposal('Mocha proposal'))
+                .to.emit(contract, "ProposalRegistered")
+                .withArgs(1n);
+            await expect(contract.endProposalsRegistering()).to.emit(contract, "WorkflowStatusChange").withArgs(1n, 2n);
+        });
+
+        it('Should emit event Voted when sending a vote', async () => {
+            await expect(contract.startVotingSession()).to.emit(contract, "WorkflowStatusChange").withArgs(2n, 3n);
+            await expect(contract.connect(firstVoter).setVote(1n))
+                .to.emit(contract, "Voted")
+                .withArgs(firstVoter.address, 1n);
+            await expect(contract.endVotingSession()).to.emit(contract, "WorkflowStatusChange").withArgs(3n, 4n);
+        });
+    });
 });
