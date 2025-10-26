@@ -6,7 +6,7 @@
 
 ## Vue globale
 
-Le fichier de test (```Voting.ts```) est dans le dossier ```4. Testing/Projet2/test/```.
+Le fichier de test (```Voting.ts```) est dans le dossier ```test```.
 
 Les tests sont divisés en plusieurs catégories :
 1. Valeurs initiales des différentes variables du contrat
