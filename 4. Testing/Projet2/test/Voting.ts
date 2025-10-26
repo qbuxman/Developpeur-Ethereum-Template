@@ -49,18 +49,42 @@ describe("Voting", function () {
             expect(await contract.connect(firstVoter).getVoter(firstVoter.address)).to.deep.eq([true, false, 0n]);
         });
 
-        it.only("Should return a default proposal with getOneProposal", async () => {
-            await contract.addVoter(firstVoter.address)
+        it("Should return a default proposal with getOneProposal", async () => {
             await contract.startProposalsRegistering()
 
             expect(await contract.connect(firstVoter).getOneProposal(0)).to.deep.eq(['GENESIS', 0n]);
         });
 
-        it.only("Should return a proposal with getOneProposal after ", async () => {
-            await contract.addVoter(firstVoter.address)
-            await contract.startProposalsRegistering()
+        it("Should return the new proposal with getOneProposal after submit it", async () => {
+            const newProposal = 'new proposal'
+            await contract.connect(firstVoter).addProposal(newProposal)
 
-            expect(await contract.connect(firstVoter).getOneProposal(0)).to.deep.eq(['GENESIS', 0n]);
+            expect(await contract.connect(firstVoter).getOneProposal(1)).to.deep.eq([newProposal, 0n]);
+        });
+    })
+
+    describe.only('Workflow', () => {
+        it.only("Should change workflow status only by the owner", async () => {
+            await expect(contract.connect(firstVoter).startProposalsRegistering()).revert(ethers);
+            await contract.startProposalsRegistering();
+            expect(await contract.workflowStatus()).to.eq(1n);
+
+            await expect(contract.connect(firstVoter).endProposalsRegistering()).revert(ethers);
+            await contract.endProposalsRegistering();
+            expect(await contract.workflowStatus()).to.eq(2n);
+
+
+            await expect(contract.connect(firstVoter).startVotingSession()).revert(ethers);
+            await contract.startVotingSession();
+            expect(await contract.workflowStatus()).to.eq(3n);
+
+            await expect(contract.connect(firstVoter).endVotingSession()).revert(ethers);
+            await contract.endVotingSession();
+            expect(await contract.workflowStatus()).to.eq(4n);
+
+            await expect(contract.connect(firstVoter).tallyVotes()).revert(ethers);
+            await contract.tallyVotes();
+            expect(await contract.workflowStatus()).to.eq(5n);
         });
     })
 });
