@@ -230,5 +230,5 @@ describe("Voting", function () {
             expect(winningProposal.description).to.eq('Build a school');
             expect(winningProposal.voteCount).to.eq(2n);
         });
-});
+    });
 });
